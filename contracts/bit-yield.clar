@@ -152,3 +152,107 @@
         (risk-score (get risk-score strategy))
     )
 )
+
+(define-private (is-strategy-active (strategy {
+        strategy-id: uint,
+        enabled: bool,
+        tvl: uint,
+        apy: uint,
+        risk-score: uint
+    }))
+    (and (get enabled strategy) (> (get apy strategy) u0))
+)
+
+(define-private (calculate-highest-apy
+    (strategy (tuple (strategy-id uint) (enabled bool) (tvl uint) (apy uint) (risk-score uint)))
+    (acc (tuple (best-apy uint) (best-strategy uint)))
+)
+    (if (and
+            (get enabled strategy)
+            (> (get apy strategy) (get best-apy acc))
+        )
+        (tuple
+            (best-apy (get apy strategy))
+            (best-strategy (get strategy-id strategy))
+        )
+        acc
+    )
+)
+
+;; Public Functions
+
+(define-public (deposit (token <sip-010-token>) (amount uint))
+    (let
+        (
+            (user tx-sender)
+            (current-deposit (default-to { total-deposit: u0, share-tokens: u0, last-deposit-block: u0 }
+                (map-get? UserDeposits { user: user })))
+        )
+        (asserts! (not (var-get emergency-shutdown)) ERR-EMERGENCY-SHUTDOWN)
+        (asserts! (> amount u0) ERR-INVALID-AMOUNT)
+
+        ;; Transfer tokens to contract
+        (try! (contract-call? token transfer
+            amount
+            tx-sender
+            (as-contract tx-sender)
+            none))
+
+        (let
+            (
+                (new-shares (calculate-shares amount))
+                (new-total-deposit (+ (get total-deposit current-deposit) amount))
+            )
+            (map-set UserDeposits
+                { user: user }
+                {
+                    total-deposit: new-total-deposit,
+                    share-tokens: (+ (get share-tokens current-deposit) new-shares),
+                    last-deposit-block: block-height
+                }
+            )
+
+            (var-set total-value-locked (+ (var-get total-value-locked) amount))
+
+            (try! (allocate-to-best-strategy amount))
+
+            (ok true)
+        )
+    )
+)
+
+(define-public (withdraw (token <sip-010-token>) (share-amount uint))
+    (let
+        (
+            (user tx-sender)
+            (user-deposit (unwrap! (map-get? UserDeposits { user: user }) ERR-INSUFFICIENT-BALANCE))
+        )
+        (asserts! (<= share-amount (get share-tokens user-deposit)) ERR-INSUFFICIENT-BALANCE)
+
+        (let
+            (
+                (withdrawal-amount (calculate-withdrawal-amount share-amount))
+                (new-shares (- (get share-tokens user-deposit) share-amount))
+            )
+            (map-set UserDeposits
+                { user: user }
+                {
+                    total-deposit: (- (get total-deposit user-deposit) withdrawal-amount),
+                    share-tokens: new-shares,
+                    last-deposit-block: (get last-deposit-block user-deposit)
+                }
+            )
+
+            (var-set total-value-locked (- (var-get total-value-locked) withdrawal-amount))
+
+            ;; Transfer tokens back to user
+            (try! (as-contract (contract-call? token transfer
+                withdrawal-amount
+                tx-sender
+                user
+                none)))
+
+            (ok withdrawal-amount)
+        )
+    )
+)
