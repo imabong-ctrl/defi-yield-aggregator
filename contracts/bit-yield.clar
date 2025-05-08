@@ -66,3 +66,89 @@
         last-deposit-block: uint
     }
 )
+
+(define-map StrategyAllocations
+    { strategy-id: uint }
+    {
+        allocation-percentage: uint,
+        min-deposit: uint,
+        max-deposit: uint
+    }
+)
+
+;; Types
+
+(define-data-var strategy-type
+    (tuple (strategy-id uint) (enabled bool) (tvl uint) (apy uint) (risk-score uint))
+    (tuple
+        (strategy-id u0)
+        (enabled false)
+        (tvl u0)
+        (apy u0)
+        (risk-score u0)
+    )
+)
+
+;; Read-only Functions
+
+(define-read-only (get-strategy-list)
+    (list u1 u2 u3 u4 u5 u6 u7 u8 u9 u10)
+)
+
+(define-read-only (get-strategy-info (strategy-id uint))
+    (map-get? Strategies { strategy-id: strategy-id })
+)
+
+(define-read-only (get-user-info (user principal))
+    (map-get? UserDeposits { user: user })
+)
+
+(define-read-only (get-total-tvl)
+    (var-get total-value-locked)
+)
+
+(define-read-only (get-token-contract)
+    (var-get token-contract)
+)
+
+(define-read-only (calculate-best-strategy (amount uint))
+    (let
+        (
+            (strategies (get-active-strategies))
+            (initial-acc (tuple
+                (best-apy u0)
+                (best-strategy u0)
+            ))
+        )
+        (fold calculate-highest-apy strategies initial-acc)
+    )
+)
+
+(define-read-only (get-active-strategies)
+    (let
+        ((strategy-1 (convert-to-filtered-strategy (unwrap-strategy u1)))
+         (strategy-2 (convert-to-filtered-strategy (unwrap-strategy u2))))
+        (filter is-strategy-active (list strategy-1 strategy-2))
+    )
+)
+
+;; Private Functions
+
+(define-private (convert-to-filtered-strategy (strategy {
+        strategy-id: uint,
+        name: (string-utf8 64),
+        protocol: (string-utf8 64),
+        enabled: bool,
+        tvl: uint,
+        apy: uint,
+        risk-score: uint,
+        last-harvest: uint
+    }))
+    (tuple
+        (strategy-id (get strategy-id strategy))
+        (enabled (get enabled strategy))
+        (tvl (get tvl strategy))
+        (apy (get apy strategy))
+        (risk-score (get risk-score strategy))
+    )
+)
