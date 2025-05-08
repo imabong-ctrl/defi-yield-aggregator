@@ -208,7 +208,7 @@
                 {
                     total-deposit: new-total-deposit,
                     share-tokens: (+ (get share-tokens current-deposit) new-shares),
-                    last-deposit-block: block-height
+                    last-deposit-block: stacks-block-height
                 }
             )
 
@@ -306,7 +306,7 @@
                 tvl: u0,
                 apy: u0,
                 risk-score: u0,
-                last-harvest: block-height
+                last-harvest: stacks-block-height
             }
         )
 
